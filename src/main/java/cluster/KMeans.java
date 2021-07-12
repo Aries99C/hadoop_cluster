@@ -15,9 +15,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.LineReader;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 public class KMeans {
 
@@ -26,7 +24,7 @@ public class KMeans {
     public static final String NEW_CENTER = "/cluster/new_center/part-r-00000";
     public static final double delta = 1e-2;
     public static final int dim = 20;
-    public static int k = 3;
+    public static int k = 13;
 
     public static final class SampleMapper extends Mapper<Object, Text, Text, Text> {
 
@@ -208,6 +206,8 @@ public class KMeans {
     public static void clear() throws IOException {
         deleteFile("/cluster/center");
         deleteFile("/cluster/new_center");
+        deleteFile("/cluster/output.txt");
+        deleteFile("/cluster/sse" + k + ".txt");
     }
 
     public static void deleteFile(String path) throws IOException {
@@ -271,6 +271,35 @@ public class KMeans {
         outputStream.flush();
     }
 
+    public static void output() throws IOException {
+        double[][] centers = getCenters(CENTER);
+        Path dataPath = new Path(DATA);
+        Configuration conf = new Configuration();
+        FileSystem fileSystem = dataPath.getFileSystem(conf);
+        FSDataInputStream inputStream = fileSystem.open(dataPath);
+        LineReader reader = new LineReader(inputStream, conf);
+        FSDataOutputStream outputStream = fileSystem.create(new Path("/cluster/output.txt"));
+        Text line = new Text();
+        while (reader.readLine(line) > 0) {
+            double[] point = getPoint(line);
+            double minDistance = Double.MAX_VALUE;
+            int minCluster = -1;
+            for (int i = 0; i < k; i++) {
+                double distance = 0;
+                for (int j = 0; j < dim; j++) {
+                    distance = distance + Math.pow(Math.abs(centers[i][j] - point[j]), 2);
+                }
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    minCluster = i;
+                }
+            }
+            String result = minCluster + "\n";
+            outputStream.write(result.getBytes());
+        }
+        outputStream.flush();
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
         // clear centers
         clear();
@@ -286,5 +315,6 @@ public class KMeans {
             }
         }
         sse();
+        output();
     }
 }
